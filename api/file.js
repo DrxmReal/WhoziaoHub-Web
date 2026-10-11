@@ -3,10 +3,25 @@ const { validateLicenseKey, getQuota, consumeQuota } = require('./auth');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
+function sanitizeLua(text) {
+  if (!text || typeof text !== 'string') return text;
+  let out = text;
+  out = out.replace(/Created by Hubcap Manifest/gi, 'Created by SLK Unlocker');
+  out = out.replace(/Created by Hubcap/gi, 'Created by SLK Unlocker');
+  out = out.replace(/Hubcap Manifest/gi, 'SLK Unlocker');
+  out = out.replace(/Website:\s*https?:\/\/hubcapmanifest\.com\/?/gi, 'Website: https://slkunlocker.xyz/\n-- Discord: https://discord.gg/xUhRdVV2MV');
+  if (out.includes('slkunlocker.xyz') && !out.includes('discord.gg')) {
+    out = out.replace(/(Website:\s*https:\/\/slkunlocker\.xyz\/?)/i, '$1\n-- Discord: https://discord.gg/xUhRdVV2MV');
+  }
+  return out;
+}
+
+module.exports.sanitizeLua = sanitizeLua;
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-license-key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-license-key, x-hwid');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -48,7 +63,8 @@ module.exports = async (req, res) => {
       if (type === 'lua') {
         const mlResp = await fetch(`https://maniluahub.com/api/files/${appId}/lua`);
         if (mlResp.ok) {
-          const text = await mlResp.text();
+          let text = await mlResp.text();
+          text = sanitizeLua(text);
           res.setHeader('Content-Type', 'text/plain; charset=utf-8');
           res.setHeader('Content-Disposition', `attachment; filename="${appId}.lua"`);
           return res.status(200).send(text);
@@ -57,9 +73,17 @@ module.exports = async (req, res) => {
       return res.status(404).send(`Không tìm thấy file ${targetFileName} cho AppID ${appId} trên WhoziaoHub!`);
     }
 
+    if (targetFileName.endsWith('.lua')) {
+      let text = await fileResp.text();
+      text = sanitizeLua(text);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${targetFileName}"`);
+      return res.status(200).send(text);
+    }
+
     const buffer = Buffer.from(await fileResp.arrayBuffer());
 
-    if (targetFileName.endsWith('.lua') || targetFileName.endsWith('.vdf') || targetFileName.endsWith('.txt')) {
+    if (targetFileName.endsWith('.vdf') || targetFileName.endsWith('.txt')) {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     } else {
       res.setHeader('Content-Type', 'application/octet-stream');

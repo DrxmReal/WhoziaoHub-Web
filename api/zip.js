@@ -1,6 +1,7 @@
 // api/zip.js - Package all manifests, Lua & key.vdf into a single zip download
 const JSZip = require('jszip');
 const { validateLicenseKey, getQuota, consumeQuota } = require('./auth');
+const { sanitizeLua } = require('./file');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
@@ -57,8 +58,14 @@ module.exports = async (req, res) => {
               headers: { "Authorization": `Bearer ${GITHUB_TOKEN}` }
             });
             if (fResp.ok) {
-              const buf = await fResp.arrayBuffer();
-              zip.file(file.name, buf);
+              if (file.name.endsWith('.lua')) {
+                let text = await fResp.text();
+                text = sanitizeLua(text);
+                zip.file(file.name, text);
+              } else {
+                const buf = await fResp.arrayBuffer();
+                zip.file(file.name, buf);
+              }
               filesAdded++;
             }
           } catch (e) {
