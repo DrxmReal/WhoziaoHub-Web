@@ -150,12 +150,28 @@ function setLanguage(lang) {
     }
   });
 
-  // Re-sync dynamic state buttons
+  // Re-sync dynamic state buttons & remaining time
   updateKeyButtonUI(!!activeKeyInfo);
   if (activeKeyInfo) {
+    updateKeyTimeUI(activeKeyInfo);
     updateModalKeyDetails(activeKeyInfo);
   }
 }
+
+function updateKeyTimeUI(info) {
+  const keyTimePill = document.getElementById("keyTimePill");
+  const keyTimeDisplay = document.getElementById("keyTimeDisplay");
+  if (!keyTimePill || !keyTimeDisplay) return;
+
+  if (info && info.success) {
+    const formatted = formatRemainingTime(info.expiry_date);
+    keyTimeDisplay.textContent = formatted;
+    keyTimePill.style.display = "flex";
+  } else {
+    keyTimePill.style.display = "none";
+  }
+}
+
 
 // Helpers
 function showToast(msg, isError = false) {
@@ -176,8 +192,22 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-// Daily Quota Tracking (Persists across F5 / page reloads in localStorage)
-const DAILY_LIMIT = 20;
+// Format Remaining Time Dynamically (bilingual)
+function formatRemainingTime(expiryDate) {
+  if (!expiryDate) return currentLang === "en" ? "Permanent" : "Không giới hạn";
+  const diffMs = new Date(expiryDate).getTime() - Date.now();
+  if (diffMs <= 0) return currentLang === "en" ? "Expired" : "Đã hết hạn";
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const mins = totalMinutes % 60;
+  if (currentLang === "en") {
+    return days > 0 ? `${days}d ${hours}h` : (hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
+  }
+  return days > 0 ? `${days} ngày ${hours} giờ` : (hours > 0 ? `${hours} giờ ${mins} phút` : `${mins} phút`);
+}
+
 
 function getTodayKey() {
   const d = new Date();
@@ -242,20 +272,26 @@ async function checkAuth(keyToTest = userLicenseKey) {
     return false;
   }
 
+  // Normalize key
+  const cleanKey = keyToTest.trim().toUpperCase();
+
   // If we already have cached key info in memory or localStorage, render immediately so user sees time right away
-  if (activeKeyInfo && activeKeyInfo.license_key === keyToTest) {
+  if (activeKeyInfo && activeKeyInfo.license_key && activeKeyInfo.license_key.toUpperCase() === cleanKey) {
     if (quotaDisplay) quotaDisplay.textContent = `${todayQuota.remaining} / ${todayQuota.limit}`;
+    const formatted = formatRemainingTime(activeKeyInfo.expiry_date);
     if (keyTimePill && keyTimeDisplay) {
-      keyTimeDisplay.textContent = activeKeyInfo.timeLeft || "Còn hiệu lực";
+      keyTimeDisplay.textContent = formatted;
       keyTimePill.style.display = "flex";
     }
     updateKeyButtonUI(true);
-    updateModalKeyDetails(activeKeyInfo);
+    updateModalKeyDetails({
+      ...activeKeyInfo,
+      timeLeft: formatted
+    });
   }
 
   try {
     let data = null;
-    const cleanKey = keyToTest.trim();
 
     if (cleanKey === "WHOZIAO-HUTAO-VIP-2026" || cleanKey === "SLK-VIP-KEY") {
       data = {
@@ -263,17 +299,18 @@ async function checkAuth(keyToTest = userLicenseKey) {
         license_key: cleanKey,
         plan: "VIP Master Owner",
         expiry: "Vĩnh Viễn",
-        timeLeft: "Không giới hạn",
+        expiry_date: null,
+        timeLeft: currentLang === "en" ? "Permanent" : "Không giới hạn",
         quota: todayQuota
       };
     } else {
-      // 1. Direct Supabase Query (Fastest & Most reliable on Vercel)
+      // 1. Direct Supabase Query with ILIKE (Case-insensitive & ultra reliable)
       const SUPABASE_URL = "https://gbdmnkbvlhilzcptdqso.supabase.co";
       const _p1 = ["sb_sec", "ret_YlkmiCA", "Kogzh86Il8", "egK-A_-bIjCG4d"].join("");
       const SUPABASE_KEY = _p1;
 
       try {
-        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=eq.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=ilike.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
           headers: {
             "apikey": SUPABASE_KEY,
             "Authorization": `Bearer ${SUPABASE_KEY}`
@@ -283,27 +320,21 @@ async function checkAuth(keyToTest = userLicenseKey) {
           const records = await sRes.json();
           if (Array.isArray(records) && records.length > 0) {
             const item = records[0];
-            let timeLeft = "Còn hiệu lực";
-            let expFormatted = "Còn hiệu lực";
+            let timeLeft = formatRemainingTime(item.expiry_date);
+            let expFormatted = item.expiry_date ? new Date(item.expiry_date).toLocaleString("vi-VN") : "Còn hiệu lực";
             if (item.expiry_date) {
               const diffMs = new Date(item.expiry_date).getTime() - Date.now();
               if (diffMs <= 0) {
-                showToast("Key đã hết hạn sử dụng!", true);
+                showToast(currentLang === "en" ? "License Key has expired!" : "Key đã hết hạn sử dụng!", true);
                 clearKey();
                 return false;
               }
-              const totalMinutes = Math.floor(diffMs / (1000 * 60));
-              const totalHours = Math.floor(totalMinutes / 60);
-              const days = Math.floor(totalHours / 24);
-              const hours = totalHours % 24;
-              const mins = totalMinutes % 60;
-              timeLeft = days > 0 ? `${days} ngày ${hours} giờ` : (hours > 0 ? `${hours} giờ ${mins} phút` : `${mins} phút`);
-              expFormatted = new Date(item.expiry_date).toLocaleString("vi-VN");
             }
             data = {
               success: true,
               license_key: cleanKey,
-              plan: `SLK Unlocker (${item.duration || 30} ngày)`,
+              expiry_date: item.expiry_date,
+              plan: `SLK Unlocker (${item.duration || 30} ${currentLang === "en" ? "days" : "ngày"})`,
               expiry: expFormatted,
               timeLeft: timeLeft,
               quota: todayQuota
@@ -327,6 +358,7 @@ async function checkAuth(keyToTest = userLicenseKey) {
               data = {
                 ...apiData,
                 license_key: cleanKey,
+                timeLeft: formatRemainingTime(apiData.expiryRaw || apiData.expiry_date),
                 quota: todayQuota
               };
             }
@@ -343,7 +375,8 @@ async function checkAuth(keyToTest = userLicenseKey) {
           license_key: cleanKey,
           plan: "SLK Unlocker Standard",
           expiry: "Đang hoạt động",
-          timeLeft: "Còn hiệu lực",
+          expiry_date: null,
+          timeLeft: currentLang === "en" ? "Active" : "Còn hiệu lực",
           quota: todayQuota
         };
       }
@@ -363,10 +396,7 @@ async function checkAuth(keyToTest = userLicenseKey) {
       updateKeyButtonUI(true);
 
       // Show Key Time Remaining Pill in Navbar
-      if (keyTimePill && keyTimeDisplay) {
-        keyTimeDisplay.textContent = data.timeLeft || "Active";
-        keyTimePill.style.display = "flex";
-      }
+      updateKeyTimeUI(data);
 
       // Update Modal details if open
       updateModalKeyDetails(data);
@@ -399,8 +429,8 @@ function updateModalKeyDetails(data) {
   if (data && data.success) {
     detailsBox.style.display = "flex";
     if (kdStatus) kdStatus.textContent = t("kdStatusActive");
-    if (kdTimeLeft) kdTimeLeft.textContent = data.timeLeft || "Active";
-    if (kdExpiry) kdExpiry.textContent = data.expiry || "Permanent";
+    if (kdTimeLeft) kdTimeLeft.textContent = formatRemainingTime(data.expiry_date) || data.timeLeft || "Active";
+    if (kdExpiry) kdExpiry.textContent = data.expiry || (currentLang === "en" ? "Permanent" : "Vĩnh viễn");
     if (btnClearKey) btnClearKey.style.display = "block";
     if (btnSubmitKeyText) btnSubmitKeyText.textContent = t("modalBtnChange");
   } else {
