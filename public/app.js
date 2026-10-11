@@ -206,7 +206,7 @@ function formatBytes(bytes) {
 function formatRemainingTime(expiryDate, isVip = false) {
   if (!expiryDate) {
     if (isVip) return currentLang === "en" ? "Permanent" : "Vĩnh viễn";
-    return currentLang === "en" ? "Checking..." : "Đang kiểm tra...";
+    return currentLang === "en" ? "Active" : "Còn hiệu lực";
   }
   const diffMs = new Date(expiryDate).getTime() - Date.now();
   if (diffMs <= 0) return currentLang === "en" ? "Expired" : "Đã hết hạn";
@@ -321,82 +321,84 @@ async function checkAuth(keyToTest = userLicenseKey) {
         quota: todayQuota
       };
     } else {
-      // 1. Direct Supabase Query with ILIKE (Case-insensitive & ultra reliable)
-      const SUPABASE_URL = "https://gbdmnkbvlhilzcptdqso.supabase.co";
-      const _p1 = ["sb_sec", "ret_YlkmiCA", "Kogzh86Il8", "egK-A_-bIjCG4d"].join("");
-      const SUPABASE_KEY = _p1;
-
+      // 1. First attempt: Server API Route /api/auth/verify (Bypasses all client Adblockers, CORS & ISP DNS blocks)
       try {
-        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=ilike.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`
-          }
+        const res = await fetch(`/api/auth/verify`, {
+          headers: { "x-license-key": cleanKey }
         });
-        if (sRes.ok) {
-          const records = await sRes.json();
-          if (Array.isArray(records) && records.length > 0) {
-            const item = records[0];
-            let timeLeft = formatRemainingTime(item.expiry_date, false);
-            let expFormatted = item.expiry_date ? new Date(item.expiry_date).toLocaleString("vi-VN") : (currentLang === "en" ? "Active" : "Còn hiệu lực");
-            if (item.expiry_date) {
-              const diffMs = new Date(item.expiry_date).getTime() - Date.now();
-              if (diffMs <= 0) {
-                showToast(currentLang === "en" ? "License Key has expired!" : "Key đã hết hạn sử dụng!", true);
-                clearKey();
-                return false;
-              }
-            }
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const apiData = await res.json();
+          if (apiData && apiData.success) {
+            const exp = apiData.expiry_date || apiData.expiryRaw || null;
             data = {
               success: true,
               license_key: cleanKey,
-              expiry_date: item.expiry_date,
-              plan: `SLK Unlocker (${item.duration || 1} ${currentLang === "en" ? "day(s)" : "ngày"})`,
-              expiry: expFormatted,
-              timeLeft: timeLeft,
+              expiry_date: exp,
+              plan: apiData.plan || `SLK Unlocker (1 ${currentLang === "en" ? "day(s)" : "ngày"})`,
+              expiry: apiData.expiry || (exp ? new Date(exp).toLocaleString("vi-VN") : "Còn hiệu lực"),
+              timeLeft: exp ? formatRemainingTime(exp, false) : (currentLang === "en" ? "Active" : "Còn hiệu lực"),
               quota: todayQuota
             };
           }
         }
-      } catch (sErr) {
-        console.warn("Direct Supabase query error:", sErr);
+      } catch (apiErr) {
+        console.warn("Server API verify error:", apiErr);
       }
 
-      // 2. Server API route fallback
+      // 2. Direct Supabase Query with ILIKE (Client-side fallback)
       if (!data) {
+        const SUPABASE_URL = "https://gbdmnkbvlhilzcptdqso.supabase.co";
+        const _p1 = ["sb_sec", "ret_YlkmiCA", "Kogzh86Il8", "egK-A_-bIjCG4d"].join("");
+        const SUPABASE_KEY = _p1;
+
         try {
-          const res = await fetch(`/api/auth/verify`, {
-            headers: { "x-license-key": cleanKey }
+          const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=ilike.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`
+            }
           });
-          const contentType = res.headers.get("content-type") || "";
-          if (contentType.includes("application/json")) {
-            const apiData = await res.json();
-            if (apiData && apiData.success) {
-              const exp = apiData.expiryRaw || apiData.expiry_date;
+          if (sRes.ok) {
+            const records = await sRes.json();
+            if (Array.isArray(records) && records.length > 0) {
+              const item = records[0];
+              let timeLeft = formatRemainingTime(item.expiry_date, false);
+              let expFormatted = item.expiry_date ? new Date(item.expiry_date).toLocaleString("vi-VN") : (currentLang === "en" ? "Active" : "Còn hiệu lực");
+              if (item.expiry_date) {
+                const diffMs = new Date(item.expiry_date).getTime() - Date.now();
+                if (diffMs <= 0) {
+                  showToast(currentLang === "en" ? "License Key has expired!" : "Key đã hết hạn sử dụng!", true);
+                  clearKey();
+                  return false;
+                }
+              }
               data = {
-                ...apiData,
+                success: true,
                 license_key: cleanKey,
-                expiry_date: exp,
-                timeLeft: formatRemainingTime(exp, false),
+                expiry_date: item.expiry_date,
+                plan: `SLK Unlocker (${item.duration || 1} ${currentLang === "en" ? "day(s)" : "ngày"})`,
+                expiry: expFormatted,
+                timeLeft: timeLeft,
                 quota: todayQuota
               };
             }
           }
-        } catch (apiErr) {
-          console.warn("API route error:", apiErr);
+        } catch (sErr) {
+          console.warn("Direct Supabase query error:", sErr);
         }
       }
 
-      // 3. Offline format fallback if network error
+      // 3. Offline format fallback if both server and supabase fail
       if (!data && cleanKey.startsWith("SLK-") && cleanKey.length >= 14) {
-        const existingExp = (activeKeyInfo && activeKeyInfo.expiry_date) || null;
+        const fallbackExp = (activeKeyInfo && activeKeyInfo.expiry_date) || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
         data = {
           success: true,
           license_key: cleanKey,
           plan: "SLK Unlocker Standard",
-          expiry: existingExp ? new Date(existingExp).toLocaleString("vi-VN") : (currentLang === "en" ? "Active" : "Đang hoạt động"),
-          expiry_date: existingExp,
-          timeLeft: existingExp ? formatRemainingTime(existingExp, false) : (currentLang === "en" ? "Active" : "Còn hiệu lực"),
+          expiry: new Date(fallbackExp).toLocaleString("vi-VN"),
+          expiry_date: fallbackExp,
+          timeLeft: formatRemainingTime(fallbackExp, false),
           quota: todayQuota
         };
       }
