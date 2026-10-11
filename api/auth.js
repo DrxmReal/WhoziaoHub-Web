@@ -78,53 +78,13 @@ async function validateLicenseKey(key, clientHwid) {
           expiryFormatted = new Date(item.expiry_date).toLocaleString("vi-VN");
         }
 
-        // 3. HWID Strict Verification
-        const registeredHwid = (item.hwid || '').trim();
-        const incomingHwid = (clientHwid || '').trim();
-
-        if (registeredHwid) {
-          if (!incomingHwid) {
-            return {
-              valid: false,
-              hwidRequired: true,
-              registeredHwid: registeredHwid,
-              message: `Key này đã liên kết với thiết bị (${registeredHwid}). Vui lòng nhập HWID của máy hoặc mở từ app SLK Unlocker!`
-            };
-          }
-          if (incomingHwid.toUpperCase() !== registeredHwid.toUpperCase()) {
-            return {
-              valid: false,
-              hwidMismatch: true,
-              registeredHwid: registeredHwid,
-              message: `HWID không khớp! Key này chỉ hoạt động trên thiết bị (${registeredHwid}), thiết bị hiện tại là (${incomingHwid}).`
-            };
-          }
-        } else if (incomingHwid) {
-          // Auto-bind HWID if key was newly generated and not bound yet
-          try {
-            await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=eq.${encodeURIComponent(cleanKey)}`, {
-              method: "PATCH",
-              headers: {
-                "apikey": SUPABASE_SECRET,
-                "Authorization": `Bearer ${SUPABASE_SECRET}`,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-              },
-              body: JSON.stringify({ hwid: incomingHwid.toUpperCase(), is_used: true })
-            });
-            item.hwid = incomingHwid.toUpperCase();
-          } catch (e) {
-            console.warn("Could not bind HWID:", e);
-          }
-        }
-
         return {
           valid: true,
           plan: `SLK Unlocker (${item.duration || 30} ngày)`,
           expiry: expiryFormatted,
           expiryRaw: item.expiry_date,
           timeLeft: timeLeft,
-          hwid: item.hwid || incomingHwid || "All Devices",
+          hwid: item.hwid || "Không giới hạn",
           message: "Key SLK Unlocker hợp lệ!"
         };
       } else {
@@ -193,14 +153,11 @@ module.exports = async (req, res) => {
     });
   }
 
-  const auth = await validateLicenseKey(key, clientHwid);
+  const auth = await validateLicenseKey(key);
   if (!auth.valid) {
     return res.status(403).json({
       success: false,
-      message: auth.message,
-      hwidRequired: auth.hwidRequired || false,
-      hwidMismatch: auth.hwidMismatch || false,
-      registeredHwid: auth.registeredHwid || null
+      message: auth.message
     });
   }
 

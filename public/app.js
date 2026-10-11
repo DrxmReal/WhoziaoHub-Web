@@ -1,7 +1,6 @@
 // public/app.js - Frontend Interaction, i18n & API Calls
 let currentAppId = null;
 let userLicenseKey = localStorage.getItem("whoziao_license_key") || "";
-let userHwid = localStorage.getItem("whoziao_hwid") || "";
 let activeKeyInfo = null;
 let currentLang = localStorage.getItem("whoziao_lang") || "vi";
 
@@ -49,15 +48,13 @@ const translations = {
     kdStatusActive: "Đang hoạt động ✓",
     kdTimeLeftLabel: "Thời gian còn lại:",
     kdExpiryLabel: "Hạn sử dụng:",
-    kdHwidLabel: "HWID liên kết:",
     toastKeyRequired: "Vui lòng kích hoạt License Key trước khi tải file!",
     toastKeyEmpty: "Vui lòng nhập License Key!",
-    toastKeySuccess: "Kích hoạt License Key & HWID thành công!",
+    toastKeySuccess: "Kích hoạt License Key thành công!",
     toastKeyCleared: "Đã xóa License Key khỏi trình duyệt!",
     toastSearching: "Đang tìm kiếm",
     toastErrorLookup: "Lỗi tra cứu!",
-    toastErrorServer: "Lỗi kết nối máy chủ!",
-    toastHwidMismatch: "Mã HWID không khớp với thiết bị đã đăng ký cho Key này!"
+    toastErrorServer: "Lỗi kết nối máy chủ!"
   },
   en: {
     siteTitle: "WhoziaoHub — Steam Depot Manifest & Lua Registry",
@@ -99,15 +96,13 @@ const translations = {
     kdStatusActive: "Active & Verified ✓",
     kdTimeLeftLabel: "Remaining time:",
     kdExpiryLabel: "Expires at:",
-    kdHwidLabel: "Linked HWID:",
     toastKeyRequired: "Please activate your License Key before downloading files!",
     toastKeyEmpty: "Please enter a License Key!",
-    toastKeySuccess: "License Key & HWID activated successfully!",
+    toastKeySuccess: "License Key activated successfully!",
     toastKeyCleared: "License Key cleared from browser!",
     toastSearching: "Searching for",
     toastErrorLookup: "Lookup failed!",
-    toastErrorServer: "Server connection error!",
-    toastHwidMismatch: "HWID does not match the registered device for this Key!"
+    toastErrorServer: "Server connection error!"
   }
 };
 
@@ -194,8 +189,8 @@ function updateKeyButtonUI(isActive) {
   }
 }
 
-// 2. Quota & Key Management (With Strict HWID Verification)
-async function checkAuth(keyToTest = userLicenseKey, hwidToTest = userHwid) {
+// 2. Quota & Key Management (Direct Key Verification)
+async function checkAuth(keyToTest = userLicenseKey) {
   const quotaDisplay = document.getElementById("quotaDisplay");
   const keyTimePill = document.getElementById("keyTimePill");
   const keyTimeDisplay = document.getElementById("keyTimeDisplay");
@@ -211,17 +206,14 @@ async function checkAuth(keyToTest = userLicenseKey, hwidToTest = userHwid) {
   try {
     const res = await fetch(`/api/auth/verify`, {
       headers: {
-        "x-license-key": keyToTest,
-        "x-hwid": hwidToTest || ""
+        "x-license-key": keyToTest
       }
     });
     const data = await res.json();
 
     if (data.success) {
       userLicenseKey = keyToTest;
-      userHwid = hwidToTest || data.hwid || "";
       localStorage.setItem("whoziao_license_key", userLicenseKey);
-      if (userHwid) localStorage.setItem("whoziao_hwid", userHwid);
 
       activeKeyInfo = data;
       
@@ -246,13 +238,6 @@ async function checkAuth(keyToTest = userLicenseKey, hwidToTest = userHwid) {
       if (keyTimePill) keyTimePill.style.display = "none";
       activeKeyInfo = null;
       updateKeyButtonUI(false);
-
-      // If HWID is required, open modal and focus HWID input
-      if (data.hwidRequired || data.hwidMismatch) {
-        openKeyModal();
-        const hwInput = document.getElementById("hwidInput");
-        if (hwInput) hwInput.focus();
-      }
       return false;
     }
   } catch (e) {
@@ -266,7 +251,6 @@ function updateModalKeyDetails(data) {
   const kdStatus = document.getElementById("kdStatus");
   const kdTimeLeft = document.getElementById("kdTimeLeft");
   const kdExpiry = document.getElementById("kdExpiry");
-  const kdHwid = document.getElementById("kdHwid");
   const btnClearKey = document.getElementById("btnClearKey");
   const btnSubmitKeyText = document.getElementById("btnSubmitKeyText");
 
@@ -277,7 +261,6 @@ function updateModalKeyDetails(data) {
     if (kdStatus) kdStatus.textContent = t("kdStatusActive");
     if (kdTimeLeft) kdTimeLeft.textContent = data.timeLeft || "Active";
     if (kdExpiry) kdExpiry.textContent = data.expiry || "Permanent";
-    if (kdHwid) kdHwid.textContent = data.hwid || "All Devices";
     if (btnClearKey) btnClearKey.style.display = "block";
     if (btnSubmitKeyText) btnSubmitKeyText.textContent = t("modalBtnChange");
   } else {
@@ -309,8 +292,7 @@ async function inspectApp(appId) {
   try {
     const res = await fetch(`/api/v1/manifest/${appId}`, {
       headers: {
-        "x-license-key": userLicenseKey,
-        "x-hwid": userHwid || ""
+        "x-license-key": userLicenseKey
       }
     });
     const data = await res.json();
@@ -378,8 +360,6 @@ async function inspectApp(appId) {
 function openKeyModal() {
   document.getElementById("keyModal").style.display = "flex";
   document.getElementById("licenseKeyInput").value = userLicenseKey;
-  const hwInput = document.getElementById("hwidInput");
-  if (hwInput) hwInput.value = userHwid;
   updateModalKeyDetails(activeKeyInfo);
   document.getElementById("licenseKeyInput").focus();
 }
@@ -390,13 +370,10 @@ function closeKeyModal() {
 
 function clearKey() {
   userLicenseKey = "";
-  userHwid = "";
   activeKeyInfo = null;
   localStorage.removeItem("whoziao_license_key");
   localStorage.removeItem("whoziao_hwid");
   document.getElementById("licenseKeyInput").value = "";
-  const hwInput = document.getElementById("hwidInput");
-  if (hwInput) hwInput.value = "";
   document.getElementById("quotaDisplay").textContent = "-- / 20";
   document.getElementById("keyTimePill").style.display = "none";
   updateKeyButtonUI(false);
@@ -409,17 +386,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // 1. Initialize language
   setLanguage(currentLang);
 
-  // 2. Auto-detect Key & HWID from URL query params (e.g. ?key=SLK-...&hwid=6A46-F2E0)
+  // 2. Auto-detect Key from URL query params (e.g. ?key=SLK-...)
   const urlParams = new URLSearchParams(window.location.search);
   const qKey = urlParams.get("key");
-  const qHwid = urlParams.get("hwid");
   if (qKey) {
     userLicenseKey = qKey.trim();
     localStorage.setItem("whoziao_license_key", userLicenseKey);
-    if (qHwid) {
-      userHwid = qHwid.trim();
-      localStorage.setItem("whoziao_hwid", userHwid);
-    }
     // Clean URL query parameters smoothly without page refresh
     window.history.replaceState({}, document.title, window.location.pathname);
   }
@@ -444,12 +416,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btnSubmitKey").addEventListener("click", async () => {
     const keyVal = document.getElementById("licenseKeyInput").value.trim();
-    const hwidVal = (document.getElementById("hwidInput")?.value || "").trim();
     if (!keyVal) {
       showToast(t("toastKeyEmpty"), true);
       return;
     }
-    const ok = await checkAuth(keyVal, hwidVal);
+    const ok = await checkAuth(keyVal);
     if (ok) {
       closeKeyModal();
       showToast(t("toastKeySuccess"));
@@ -486,21 +457,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnDownloadZip").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
-    window.location.href = `/api/files/${currentAppId}/zip?key=${encodeURIComponent(userLicenseKey)}&hwid=${encodeURIComponent(userHwid)}`;
+    window.location.href = `/api/files/${currentAppId}/zip?key=${encodeURIComponent(userLicenseKey)}`;
     setTimeout(checkAuth, 1500);
   });
 
   document.getElementById("btnDownloadLua").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
-    window.location.href = `/api/files/${currentAppId}/lua?key=${encodeURIComponent(userLicenseKey)}&hwid=${encodeURIComponent(userHwid)}`;
+    window.location.href = `/api/files/${currentAppId}/lua?key=${encodeURIComponent(userLicenseKey)}`;
     setTimeout(checkAuth, 1500);
   });
 
   document.getElementById("btnDownloadKey").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
-    window.location.href = `/api/files/${currentAppId}/key?key=${encodeURIComponent(userLicenseKey)}&hwid=${encodeURIComponent(userHwid)}`;
+    window.location.href = `/api/files/${currentAppId}/key?key=${encodeURIComponent(userLicenseKey)}`;
     setTimeout(checkAuth, 1500);
   });
 });
