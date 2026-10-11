@@ -2,6 +2,12 @@
 let currentAppId = null;
 let userLicenseKey = localStorage.getItem("whoziao_license_key") || "";
 let activeKeyInfo = null;
+try {
+  const cached = localStorage.getItem("whoziao_key_info");
+  if (cached) activeKeyInfo = JSON.parse(cached);
+} catch (e) {
+  activeKeyInfo = null;
+}
 let currentLang = localStorage.getItem("whoziao_lang") || "vi";
 
 // ==========================================================================
@@ -170,6 +176,35 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
+// Daily Quota Tracking (Persists across F5 / page reloads in localStorage)
+const DAILY_LIMIT = 20;
+
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getTodayQuota() {
+  const today = getTodayKey();
+  const used = parseInt(localStorage.getItem(`whoziao_used_${today}`) || "0", 10);
+  const remaining = Math.max(0, DAILY_LIMIT - used);
+  return { used, remaining, limit: DAILY_LIMIT };
+}
+
+function recordDownloadUsage() {
+  const today = getTodayKey();
+  const q = getTodayQuota();
+  const newUsed = q.used + 1;
+  localStorage.setItem(`whoziao_used_${today}`, String(newUsed));
+  const remaining = Math.max(0, DAILY_LIMIT - newUsed);
+  const quotaDisplay = document.getElementById("quotaDisplay");
+  if (quotaDisplay) {
+    quotaDisplay.textContent = `${remaining} / ${DAILY_LIMIT}`;
+  }
+  return { used: newUsed, remaining, limit: DAILY_LIMIT };
+}
+
+
 // Update the Key button UI
 function updateKeyButtonUI(isActive) {
   const keyBtn = document.getElementById("btnOpenKeyModal");
@@ -195,104 +230,133 @@ async function checkAuth(keyToTest = userLicenseKey) {
   const keyTimePill = document.getElementById("keyTimePill");
   const keyTimeDisplay = document.getElementById("keyTimeDisplay");
 
+  // Daily quota from localStorage (persists across F5)
+  const todayQuota = getTodayQuota();
+
   if (!keyToTest) {
     if (quotaDisplay) quotaDisplay.textContent = "-- / 20";
     if (keyTimePill) keyTimePill.style.display = "none";
     activeKeyInfo = null;
+    localStorage.removeItem("whoziao_key_info");
     updateKeyButtonUI(false);
     return false;
   }
 
+  // If we already have cached key info in memory or localStorage, render immediately so user sees time right away
+  if (activeKeyInfo && activeKeyInfo.license_key === keyToTest) {
+    if (quotaDisplay) quotaDisplay.textContent = `${todayQuota.remaining} / ${todayQuota.limit}`;
+    if (keyTimePill && keyTimeDisplay) {
+      keyTimeDisplay.textContent = activeKeyInfo.timeLeft || "Còn hiệu lực";
+      keyTimePill.style.display = "flex";
+    }
+    updateKeyButtonUI(true);
+    updateModalKeyDetails(activeKeyInfo);
+  }
+
   try {
     let data = null;
-    try {
-      const res = await fetch(`/api/auth/verify`, {
-        headers: { "x-license-key": keyToTest }
-      });
-      const contentType = res.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        data = await res.json();
-      }
-    } catch (apiErr) {
-      console.warn("API route error, falling back to direct auth:", apiErr);
-    }
+    const cleanKey = keyToTest.trim();
 
-    // Direct Supabase validation fallback (works seamlessly on static/Vercel)
-    if (!data || !data.success) {
+    if (cleanKey === "WHOZIAO-HUTAO-VIP-2026" || cleanKey === "SLK-VIP-KEY") {
+      data = {
+        success: true,
+        license_key: cleanKey,
+        plan: "VIP Master Owner",
+        expiry: "Vĩnh Viễn",
+        timeLeft: "Không giới hạn",
+        quota: todayQuota
+      };
+    } else {
+      // 1. Direct Supabase Query (Fastest & Most reliable on Vercel)
       const SUPABASE_URL = "https://gbdmnkbvlhilzcptdqso.supabase.co";
       const _p1 = ["sb_sec", "ret_YlkmiCA", "Kogzh86Il8", "egK-A_-bIjCG4d"].join("");
       const SUPABASE_KEY = _p1;
-      const cleanKey = keyToTest.trim();
 
-      if (cleanKey === "WHOZIAO-HUTAO-VIP-2026" || cleanKey === "SLK-VIP-KEY") {
-        data = {
-          success: true,
-          plan: "VIP Master Owner",
-          expiry: "Vĩnh Viễn",
-          timeLeft: "Không giới hạn",
-          quota: { remaining: 20, limit: 20 }
-        };
-      } else {
-        try {
-          const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=eq.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`
-            }
-          });
-          if (sRes.ok) {
-            const records = await sRes.json();
-            if (Array.isArray(records) && records.length > 0) {
-              const item = records[0];
-              let timeLeft = "Còn hiệu lực";
-              let expFormatted = "Còn hiệu lực";
-              if (item.expiry_date) {
-                const diffMs = new Date(item.expiry_date).getTime() - Date.now();
-                if (diffMs <= 0) {
-                  showToast("Key đã hết hạn sử dụng!", true);
-                  return false;
-                }
-                const totalMinutes = Math.floor(diffMs / (1000 * 60));
-                const totalHours = Math.floor(totalMinutes / 60);
-                const days = Math.floor(totalHours / 24);
-                const hours = totalHours % 24;
-                const mins = totalMinutes % 60;
-                timeLeft = days > 0 ? `${days} ngày ${hours} giờ` : (hours > 0 ? `${hours} giờ ${mins} phút` : `${mins} phút`);
-                expFormatted = new Date(item.expiry_date).toLocaleString("vi-VN");
+      try {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/key_hwids?license_key=eq.${encodeURIComponent(cleanKey)}&select=*&limit=1`, {
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        if (sRes.ok) {
+          const records = await sRes.json();
+          if (Array.isArray(records) && records.length > 0) {
+            const item = records[0];
+            let timeLeft = "Còn hiệu lực";
+            let expFormatted = "Còn hiệu lực";
+            if (item.expiry_date) {
+              const diffMs = new Date(item.expiry_date).getTime() - Date.now();
+              if (diffMs <= 0) {
+                showToast("Key đã hết hạn sử dụng!", true);
+                clearKey();
+                return false;
               }
+              const totalMinutes = Math.floor(diffMs / (1000 * 60));
+              const totalHours = Math.floor(totalMinutes / 60);
+              const days = Math.floor(totalHours / 24);
+              const hours = totalHours % 24;
+              const mins = totalMinutes % 60;
+              timeLeft = days > 0 ? `${days} ngày ${hours} giờ` : (hours > 0 ? `${hours} giờ ${mins} phút` : `${mins} phút`);
+              expFormatted = new Date(item.expiry_date).toLocaleString("vi-VN");
+            }
+            data = {
+              success: true,
+              license_key: cleanKey,
+              plan: `SLK Unlocker (${item.duration || 30} ngày)`,
+              expiry: expFormatted,
+              timeLeft: timeLeft,
+              quota: todayQuota
+            };
+          }
+        }
+      } catch (sErr) {
+        console.warn("Direct Supabase query error:", sErr);
+      }
+
+      // 2. Server API route fallback
+      if (!data) {
+        try {
+          const res = await fetch(`/api/auth/verify`, {
+            headers: { "x-license-key": cleanKey }
+          });
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const apiData = await res.json();
+            if (apiData && apiData.success) {
               data = {
-                success: true,
-                plan: `SLK Unlocker (${item.duration || 30} ngày)`,
-                expiry: expFormatted,
-                timeLeft: timeLeft,
-                quota: { remaining: 20, limit: 20 }
+                ...apiData,
+                license_key: cleanKey,
+                quota: todayQuota
               };
             }
           }
-        } catch (sErr) {
-          console.warn("Direct Supabase error:", sErr);
+        } catch (apiErr) {
+          console.warn("API route error:", apiErr);
         }
       }
 
-      // Offline format fallback if network error
+      // 3. Offline format fallback if network error
       if (!data && cleanKey.startsWith("SLK-") && cleanKey.length >= 14) {
         data = {
           success: true,
+          license_key: cleanKey,
           plan: "SLK Unlocker Standard",
           expiry: "Đang hoạt động",
           timeLeft: "Còn hiệu lực",
-          quota: { remaining: 20, limit: 20 }
+          quota: todayQuota
         };
       }
     }
 
     if (data && data.success) {
-      userLicenseKey = keyToTest;
+      userLicenseKey = cleanKey;
       localStorage.setItem("whoziao_license_key", userLicenseKey);
+      localStorage.setItem("whoziao_key_info", JSON.stringify(data));
 
       activeKeyInfo = data;
       
-      const q = data.quota || { remaining: 20, limit: 20 };
+      const q = todayQuota;
       if (quotaDisplay) quotaDisplay.textContent = `${q.remaining} / ${q.limit}`;
 
       // Update Key Button (compact, no 2 icons)
@@ -312,6 +376,7 @@ async function checkAuth(keyToTest = userLicenseKey) {
       if (quotaDisplay) quotaDisplay.textContent = "-- / 20";
       if (keyTimePill) keyTimePill.style.display = "none";
       activeKeyInfo = null;
+      localStorage.removeItem("whoziao_key_info");
       updateKeyButtonUI(false);
       return false;
     }
@@ -401,7 +466,7 @@ async function inspectApp(appId) {
             <td style="color: var(--text-dim); font-family: var(--font-mono);">${formatBytes(f.size)}</td>
             <td>
               <a href="/api/files/${appId}/manifest/${encodeURIComponent(f.name)}?key=${encodeURIComponent(userLicenseKey)}" 
-                 class="btn-sm-dl" target="_blank">
+                 class="btn-sm-dl file-dl-link" target="_blank">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>
@@ -414,6 +479,13 @@ async function inspectApp(appId) {
         `;
       }
       document.getElementById("fileTableBody").innerHTML = rowsHtml;
+
+      // Attach click listeners to decrement quota persistently
+      document.querySelectorAll(".file-dl-link").forEach(btn => {
+        btn.addEventListener("click", () => {
+          recordDownloadUsage();
+        });
+      });
     } else {
       document.getElementById("fileTableBody").innerHTML = `
         <tr><td colspan="3" style="text-align:center; padding: 20px; color: var(--text-dim);">
@@ -422,10 +494,9 @@ async function inspectApp(appId) {
       `;
     }
 
-    // Update Quota display
-    if (data.quota) {
-      document.getElementById("quotaDisplay").textContent = `${data.quota.remaining} / ${data.quota.limit}`;
-    }
+    // Update Quota display from persistent store
+    const curQuota = getTodayQuota();
+    document.getElementById("quotaDisplay").textContent = `${curQuota.remaining} / ${curQuota.limit}`;
   } catch (err) {
     showToast(t("toastErrorServer"), true);
   }
@@ -447,6 +518,7 @@ function clearKey() {
   userLicenseKey = "";
   activeKeyInfo = null;
   localStorage.removeItem("whoziao_license_key");
+  localStorage.removeItem("whoziao_key_info");
   localStorage.removeItem("whoziao_hwid");
   document.getElementById("licenseKeyInput").value = "";
   document.getElementById("quotaDisplay").textContent = "-- / 20";
@@ -532,21 +604,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnDownloadZip").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
+    recordDownloadUsage();
     window.location.href = `/api/files/${currentAppId}/zip?key=${encodeURIComponent(userLicenseKey)}`;
-    setTimeout(checkAuth, 1500);
   });
 
   document.getElementById("btnDownloadLua").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
+    recordDownloadUsage();
     window.location.href = `/api/files/${currentAppId}/lua?key=${encodeURIComponent(userLicenseKey)}`;
-    setTimeout(checkAuth, 1500);
   });
 
   document.getElementById("btnDownloadKey").addEventListener("click", () => {
     if (!currentAppId) return;
     if (!userLicenseKey) { openKeyModal(); return; }
+    recordDownloadUsage();
     window.location.href = `/api/files/${currentAppId}/key?key=${encodeURIComponent(userLicenseKey)}`;
-    setTimeout(checkAuth, 1500);
   });
 });
