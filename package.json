@@ -1,0 +1,12 @@
+{
+  "name": "whoziaohub-web",
+  "version": "1.0.0",
+  "description": "WhoziaoHub - Hu Tao Themed Steam Manifest & Lua Registry",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "jszip": "^3.10.2"
+  }
+}

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoziaoHub — Steam Depot Manifest & Lua Registry</title>
+  <link rel="icon" type="image/png" href="logo.png?v=5">
+  <link rel="shortcut icon" type="image/png" href="logo.png?v=5">
+  <link rel="apple-touch-icon" href="logo.png?v=5">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="bg-petals"></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="container nav-row">
+      <a href="/" class="brand-group">
+        <img src="logo.png" alt="WhoziaoHub Logo" class="brand-logo-img">
+        <div>
+          <div class="brand-title">WHOZIAO<span>HUB</span> <span class="brand-badge">SLK</span></div>
+        </div>
+      </a>
+
+      <div class="nav-actions">
+        <!-- Language Switcher Toggle -->
+        <div class="lang-toggle" id="langToggle" title="Đổi ngôn ngữ / Switch language">
+          <button type="button" class="lang-btn active" data-lang="vi" id="btnLangVi">VI</button>
+          <button type="button" class="lang-btn" data-lang="en" id="btnLangEn">EN</button>
+        </div>
+
+        <!-- Time Left Badge -->
+        <div class="key-time-pill" id="keyTimePill" style="display: none;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span data-i18n="timeLeftLabel">Còn lại:</span>
+          <span class="key-time-val" id="keyTimeDisplay">--</span>
+        </div>
+
+        <!-- Quota Badge -->
+        <div class="quota-pill" id="quotaPill">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M16 16h5v5"/>
+          </svg>
+          <span data-i18n="quotaLabel">Hạn ngạch:</span>
+          <span class="quota-num" id="quotaDisplay">-- / 20</span>
+        </div>
+
+        <!-- Discord Button -->
+        <a href="https://discord.gg/slkcommunity" target="_blank" rel="noopener noreferrer" class="btn-discord" id="btnDiscord" title="Tham gia Discord cộng đồng">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+          </svg>
+          <span data-i18n="discordBtn">Discord</span>
+        </a>
+
+        <!-- Key Button (Sleek, Compact, No 2 icons, No AI Slop) -->
+        <button class="key-btn" id="btnOpenKeyModal" title="Quản lý SLK License Key">
+          <span class="key-dot" id="keyActiveDot" style="display: none;"></span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7.5" cy="15.5" r="5.5"/>
+            <path d="m21 2-9.6 9.6"/>
+            <path d="m15.5 7.5 3 3"/>
+          </svg>
+          <span id="keyBtnText" data-i18n="keyBtnNotActive">Kích Hoạt Key</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-subtitle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        <span data-i18n="heroSubtitle">STEAM MANIFEST REGISTRY</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      </div>
+      <h1 class="hero-title"><span data-i18n="heroTitlePrefix">Kho Lưu Trữ </span><span class="glow-text" data-i18n="heroTitleGlow">Steam Manifest & Lua</span></h1>
+      <p class="hero-desc" data-i18n="heroDesc">
+        Tra cứu và tải xuống các gói file .manifest, key.vdf và Lua cho SteamTools & SLK Unlocker từ kho WhoziaoHub. Yêu cầu License Key hợp lệ để sử dụng.
+      </p>
+
+      <!-- Search Box -->
+      <div class="search-wrapper">
+        <div class="search-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="searchInput" data-i18n-ph="searchPlaceholder" placeholder="Nhập AppID (Ví dụ: 1091500, 1245620, 431960...) hoặc tên game..." autocomplete="off">
+          <button class="search-btn" id="btnSearch">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <span data-i18n="searchBtn">Tra Cứu</span>
+          </button>
+        </div>
+
+        <div class="quick-tags">
+          <span data-i18n="suggestionsLabel">Gợi ý:</span>
+          <span class="tag-pill" data-appid="1091500">Cyberpunk 2077 (1091500)</span>
+          <span class="tag-pill" data-appid="1245620">ELDEN RING (1245620)</span>
+          <span class="tag-pill" data-appid="431960">Wallpaper Engine (431960)</span>
+          <span class="tag-pill" data-appid="2050650">Resident Evil 4 (2050650)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Inspection Card (Result) -->
+    <section class="inspector-card" id="inspectorCard">
+      <div class="inspector-header">
+        <img src="" alt="Game Poster" class="game-poster" id="resGameImg">
+        <div class="game-info">
+          <h2 class="game-title" id="resGameTitle">-</h2>
+          <div class="game-meta-row">
+            <span class="badge badge-appid" id="resAppId">AppID: -</span>
+            <span class="badge badge-verified" id="resStatus">Trạng thái: Đã xác thực</span>
+            <span class="badge" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border);" id="resManifestCount">0 Manifests</span>
+            <span class="badge" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border);" id="resDlcCount">0 DLCs</span>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn-dl btn-zip" id="btnDownloadZip">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span data-i18n="btnDownloadZip">Tải Toàn Bộ Gói ZIP (1-Click)</span>
+            </button>
+            <button class="btn-dl btn-outline" id="btnDownloadLua">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+              </svg>
+              <span data-i18n="btnDownloadLua">Tải riêng Lua</span>
+            </button>
+            <button class="btn-dl btn-outline" id="btnDownloadKey">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7.5" cy="15.5" r="5.5"/>
+                <path d="m21 2-9.6 9.6"/>
+              </svg>
+              <span data-i18n="btnDownloadKey">Tải riêng Key.vdf</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- File Table -->
+      <div class="file-list-card">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th data-i18n="tableColFile">Tên Tệp Tin (.manifest / .lua / .vdf)</th>
+              <th data-i18n="tableColSize">Dung Lượng</th>
+              <th data-i18n="tableColAction">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="fileTableBody">
+            <tr>
+              <td colspan="3" style="text-align: center; color: var(--text-dim); padding: 18px;" data-i18n="tableLoading">Đang tải danh mục tệp tin...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: License Key Activation -->
+  <div class="modal-overlay" id="keyModal">
+    <div class="modal-content">
+      <button class="modal-close" id="btnCloseModal">×</button>
+      <div class="modal-icon-box">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <h3 class="modal-title" data-i18n="modalTitle">Xác Thực SLK License Key</h3>
+      <p class="modal-desc" data-i18n="modalDesc">
+        Nhập License Key từ ứng dụng <strong>SLK Unlocker</strong> của bạn để mở khóa quyền tải file và nhận <strong>20 lượt tải/ngày</strong> từ WhoziaoHub.
+      </p>
+
+      <!-- Current Key Info Box (shown if key is active) -->
+      <div class="key-status-details" id="keyStatusDetails" style="display: none;">
+        <div class="key-detail-row">
+          <span class="detail-label" data-i18n="kdStatusLabel">Trạng thái:</span>
+          <span class="detail-value text-success" id="kdStatus" data-i18n="kdStatusActive">Đang hoạt động ✓</span>
+        </div>
+        <div class="key-detail-row">
+          <span class="detail-label" data-i18n="kdTimeLeftLabel">Thời gian còn lại:</span>
+          <span class="detail-value text-gold" id="kdTimeLeft">--</span>
+        </div>
+        <div class="key-detail-row">
+          <span class="detail-label" data-i18n="kdExpiryLabel">Hạn sử dụng:</span>
+          <span class="detail-value" id="kdExpiry">--</span>
+        </div>
+        <div class="key-detail-row">
+          <span class="detail-label" data-i18n="kdHwidLabel">HWID liên kết:</span>
+          <span class="detail-value font-mono" id="kdHwid">--</span>
+        </div>
+      </div>
+
+      <div class="modal-inputs-wrap">
+        <input type="text" class="key-input-box" id="licenseKeyInput" data-i18n-ph="keyInputPlaceholder" placeholder="Nhập License Key (VD: SLK-2S9Y-62J7-401A)..." autocomplete="off">
+        <input type="text" class="key-input-box" id="hwidInput" data-i18n-ph="hwidInputPlaceholder" placeholder="Mã HWID máy tính (VD: 6A46-F2E0)..." autocomplete="off">
+        <div class="hwid-hint" data-i18n="hwidHint">💡 Tự động nhận diện nếu mở từ nút "Mở WhoziaoHub" trong app SLK Unlocker.</div>
+      </div>
+      <div class="modal-btn-row">
+        <button class="modal-submit" id="btnSubmitKey">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span id="btnSubmitKeyText" data-i18n="modalBtnActivate">Kích Hoạt Key</span>
+        </button>
+        <button class="btn-clear-key" id="btnClearKey" style="display: none;" title="Xóa Key khỏi trình duyệt">
+          <span data-i18n="modalBtnClear">Xóa Key</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-box" id="toastBox"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/v1/manifest/(.*)",
+      "destination": "/api/manifest.js?appId=$1"
+    },
+    {
+      "source": "/api/v1/search",
+      "destination": "/api/search.js"
+    },
+    {
+      "source": "/api/files/(.*)/lua",
+      "destination": "/api/file.js?appId=$1&type=lua"
+    },
+    {
+      "source": "/api/files/(.*)/key",
+      "destination": "/api/file.js?appId=$1&type=key"
+    },
+    {
+      "source": "/api/files/(.*)/manifest/(.*)",
+      "destination": "/api/file.js?appId=$1&type=manifest&file=$2"
+    },
+    {
+      "source": "/api/files/(.*)/zip",
+      "destination": "/api/zip.js?appId=$1"
+    },
+    {
+      "source": "/api/auth/verify",
+      "destination": "/api/auth.js"
+    },
+    {
+      "source": "/app/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
