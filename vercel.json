@@ -1,33 +1,47 @@
 {
-  "cleanUrls": true,
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/auth/verify",
-      "destination": "/api/auth"
+      "src": "api/*.js",
+      "use": "@vercel/node"
     },
     {
-      "source": "/api/v1/search",
-      "destination": "/api/search"
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/auth/verify",
+      "dest": "/api/auth.js"
     },
     {
-      "source": "/api/v1/manifest/(.*)",
-      "destination": "/api/manifest?appId=$1"
+      "src": "/api/v1/search",
+      "dest": "/api/search.js"
     },
     {
-      "source": "/api/files/(.*)/lua",
-      "destination": "/api/file?appId=$1&type=lua"
+      "src": "/api/v1/manifest/(.*)",
+      "dest": "/api/manifest.js?appId=$1"
     },
     {
-      "source": "/api/files/(.*)/key",
-      "destination": "/api/file?appId=$1&type=key"
+      "src": "/api/files/(.*)/lua",
+      "dest": "/api/file.js?appId=$1&type=lua"
     },
     {
-      "source": "/api/files/(.*)/manifest/(.*)",
-      "destination": "/api/file?appId=$1&type=manifest&file=$2"
+      "src": "/api/files/(.*)/key",
+      "dest": "/api/file.js?appId=$1&type=key"
     },
     {
-      "source": "/api/files/(.*)/zip",
-      "destination": "/api/zip?appId=$1"
+      "src": "/api/files/(.*)/manifest/(.*)",
+      "dest": "/api/file.js?appId=$1&type=manifest&file=$2"
+    },
+    {
+      "src": "/api/files/(.*)/zip",
+      "dest": "/api/zip.js?appId=$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
     }
   ]
 }

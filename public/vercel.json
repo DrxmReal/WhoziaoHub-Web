@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/auth/verify",
+      "dest": "/api/auth.js"
+    },
+    {
+      "src": "/api/v1/search",
+      "dest": "/api/search.js"
+    },
+    {
+      "src": "/api/v1/manifest/(.*)",
+      "dest": "/api/manifest.js?appId=$1"
+    },
+    {
+      "src": "/api/files/(.*)/lua",
+      "dest": "/api/file.js?appId=$1&type=lua"
+    },
+    {
+      "src": "/api/files/(.*)/key",
+      "dest": "/api/file.js?appId=$1&type=key"
+    },
+    {
+      "src": "/api/files/(.*)/manifest/(.*)",
+      "dest": "/api/file.js?appId=$1&type=manifest&file=$2"
+    },
+    {
+      "src": "/api/files/(.*)/zip",
+      "dest": "/api/zip.js?appId=$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}
