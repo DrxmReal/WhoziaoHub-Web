@@ -1,10 +1,19 @@
 // public/app.js - Frontend Interaction, i18n & API Calls
+const DAILY_LIMIT = 20;
+
 let currentAppId = null;
 let userLicenseKey = localStorage.getItem("whoziao_license_key") || "";
 let activeKeyInfo = null;
 try {
   const cached = localStorage.getItem("whoziao_key_info");
-  if (cached) activeKeyInfo = JSON.parse(cached);
+  if (cached) {
+    activeKeyInfo = JSON.parse(cached);
+    // If cached key info has null expiry_date for an SLK key, invalidate stale cache so it re-fetches cleanly
+    if (activeKeyInfo && activeKeyInfo.license_key && activeKeyInfo.license_key.startsWith("SLK-") && !activeKeyInfo.expiry_date) {
+      activeKeyInfo = null;
+      localStorage.removeItem("whoziao_key_info");
+    }
+  }
 } catch (e) {
   activeKeyInfo = null;
 }
@@ -164,7 +173,8 @@ function updateKeyTimeUI(info) {
   if (!keyTimePill || !keyTimeDisplay) return;
 
   if (info && info.success) {
-    const formatted = formatRemainingTime(info.expiry_date);
+    const isVip = !!(info.plan && info.plan.includes("VIP"));
+    const formatted = formatRemainingTime(info.expiry_date, isVip);
     keyTimeDisplay.textContent = formatted;
     keyTimePill.style.display = "flex";
   } else {
@@ -193,8 +203,11 @@ function formatBytes(bytes) {
 }
 
 // Format Remaining Time Dynamically (bilingual)
-function formatRemainingTime(expiryDate) {
-  if (!expiryDate) return currentLang === "en" ? "Permanent" : "Không giới hạn";
+function formatRemainingTime(expiryDate, isVip = false) {
+  if (!expiryDate) {
+    if (isVip) return currentLang === "en" ? "Permanent" : "Vĩnh viễn";
+    return currentLang === "en" ? "Checking..." : "Đang kiểm tra...";
+  }
   const diffMs = new Date(expiryDate).getTime() - Date.now();
   if (diffMs <= 0) return currentLang === "en" ? "Expired" : "Đã hết hạn";
   const totalMinutes = Math.floor(diffMs / (1000 * 60));
@@ -209,6 +222,7 @@ function formatRemainingTime(expiryDate) {
 }
 
 
+// Daily Quota Tracking (Persists across F5 / page reloads in localStorage)
 function getTodayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -275,10 +289,13 @@ async function checkAuth(keyToTest = userLicenseKey) {
   // Normalize key
   const cleanKey = keyToTest.trim().toUpperCase();
 
+  // If user has a key, immediately render quota
+  if (quotaDisplay) quotaDisplay.textContent = `${todayQuota.remaining} / ${todayQuota.limit}`;
+
   // If we already have cached key info in memory or localStorage, render immediately so user sees time right away
   if (activeKeyInfo && activeKeyInfo.license_key && activeKeyInfo.license_key.toUpperCase() === cleanKey) {
-    if (quotaDisplay) quotaDisplay.textContent = `${todayQuota.remaining} / ${todayQuota.limit}`;
-    const formatted = formatRemainingTime(activeKeyInfo.expiry_date);
+    const isVip = !!(activeKeyInfo.plan && activeKeyInfo.plan.includes("VIP"));
+    const formatted = formatRemainingTime(activeKeyInfo.expiry_date, isVip);
     if (keyTimePill && keyTimeDisplay) {
       keyTimeDisplay.textContent = formatted;
       keyTimePill.style.display = "flex";
@@ -298,9 +315,9 @@ async function checkAuth(keyToTest = userLicenseKey) {
         success: true,
         license_key: cleanKey,
         plan: "VIP Master Owner",
-        expiry: "Vĩnh Viễn",
+        expiry: currentLang === "en" ? "Permanent" : "Vĩnh viễn",
         expiry_date: null,
-        timeLeft: currentLang === "en" ? "Permanent" : "Không giới hạn",
+        timeLeft: currentLang === "en" ? "Permanent" : "Vĩnh viễn",
         quota: todayQuota
       };
     } else {
@@ -320,8 +337,8 @@ async function checkAuth(keyToTest = userLicenseKey) {
           const records = await sRes.json();
           if (Array.isArray(records) && records.length > 0) {
             const item = records[0];
-            let timeLeft = formatRemainingTime(item.expiry_date);
-            let expFormatted = item.expiry_date ? new Date(item.expiry_date).toLocaleString("vi-VN") : "Còn hiệu lực";
+            let timeLeft = formatRemainingTime(item.expiry_date, false);
+            let expFormatted = item.expiry_date ? new Date(item.expiry_date).toLocaleString("vi-VN") : (currentLang === "en" ? "Active" : "Còn hiệu lực");
             if (item.expiry_date) {
               const diffMs = new Date(item.expiry_date).getTime() - Date.now();
               if (diffMs <= 0) {
@@ -334,7 +351,7 @@ async function checkAuth(keyToTest = userLicenseKey) {
               success: true,
               license_key: cleanKey,
               expiry_date: item.expiry_date,
-              plan: `SLK Unlocker (${item.duration || 30} ${currentLang === "en" ? "days" : "ngày"})`,
+              plan: `SLK Unlocker (${item.duration || 1} ${currentLang === "en" ? "day(s)" : "ngày"})`,
               expiry: expFormatted,
               timeLeft: timeLeft,
               quota: todayQuota
@@ -355,10 +372,12 @@ async function checkAuth(keyToTest = userLicenseKey) {
           if (contentType.includes("application/json")) {
             const apiData = await res.json();
             if (apiData && apiData.success) {
+              const exp = apiData.expiryRaw || apiData.expiry_date;
               data = {
                 ...apiData,
                 license_key: cleanKey,
-                timeLeft: formatRemainingTime(apiData.expiryRaw || apiData.expiry_date),
+                expiry_date: exp,
+                timeLeft: formatRemainingTime(exp, false),
                 quota: todayQuota
               };
             }
@@ -370,13 +389,14 @@ async function checkAuth(keyToTest = userLicenseKey) {
 
       // 3. Offline format fallback if network error
       if (!data && cleanKey.startsWith("SLK-") && cleanKey.length >= 14) {
+        const existingExp = (activeKeyInfo && activeKeyInfo.expiry_date) || null;
         data = {
           success: true,
           license_key: cleanKey,
           plan: "SLK Unlocker Standard",
-          expiry: "Đang hoạt động",
-          expiry_date: null,
-          timeLeft: currentLang === "en" ? "Active" : "Còn hiệu lực",
+          expiry: existingExp ? new Date(existingExp).toLocaleString("vi-VN") : (currentLang === "en" ? "Active" : "Đang hoạt động"),
+          expiry_date: existingExp,
+          timeLeft: existingExp ? formatRemainingTime(existingExp, false) : (currentLang === "en" ? "Active" : "Còn hiệu lực"),
           quota: todayQuota
         };
       }
@@ -429,8 +449,9 @@ function updateModalKeyDetails(data) {
   if (data && data.success) {
     detailsBox.style.display = "flex";
     if (kdStatus) kdStatus.textContent = t("kdStatusActive");
-    if (kdTimeLeft) kdTimeLeft.textContent = formatRemainingTime(data.expiry_date) || data.timeLeft || "Active";
-    if (kdExpiry) kdExpiry.textContent = data.expiry || (currentLang === "en" ? "Permanent" : "Vĩnh viễn");
+    const isVip = !!(data.plan && data.plan.includes("VIP"));
+    if (kdTimeLeft) kdTimeLeft.textContent = formatRemainingTime(data.expiry_date, isVip);
+    if (kdExpiry) kdExpiry.textContent = data.expiry || (isVip ? (currentLang === "en" ? "Permanent" : "Vĩnh viễn") : "--");
     if (btnClearKey) btnClearKey.style.display = "block";
     if (btnSubmitKeyText) btnSubmitKeyText.textContent = t("modalBtnChange");
   } else {
@@ -651,4 +672,17 @@ document.addEventListener("DOMContentLoaded", () => {
     recordDownloadUsage();
     window.location.href = `/api/files/${currentAppId}/key?key=${encodeURIComponent(userLicenseKey)}`;
   });
+
+  // 9. Live ticker for remaining time (updates every 30 seconds)
+  setInterval(() => {
+    if (activeKeyInfo) {
+      updateKeyTimeUI(activeKeyInfo);
+      const kdTimeLeft = document.getElementById("kdTimeLeft");
+      const keyModal = document.getElementById("keyModal");
+      if (kdTimeLeft && keyModal && keyModal.style.display === "flex") {
+        const isVip = !!(activeKeyInfo.plan && activeKeyInfo.plan.includes("VIP"));
+        kdTimeLeft.textContent = formatRemainingTime(activeKeyInfo.expiry_date, isVip);
+      }
+    }
+  }, 30000);
 });
